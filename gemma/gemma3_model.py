@@ -89,6 +89,7 @@ class Gemma3ForMultimodalLM(nn.Module):
                 top_ks: torch.Tensor,
                 local_mask: torch.Tensor | None = None,
                 **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
+    # (--- 1. Compute the freqs_cis for the local and global attention ---)
     freqs_cis = {}
     freqs_cis[gemma_config.AttentionType.LOCAL_SLIDING] = (
             self.local_freqs_cis.index_select(0, input_positions)
@@ -96,9 +97,15 @@ class Gemma3ForMultimodalLM(nn.Module):
     freqs_cis[gemma_config.AttentionType.GLOBAL] = (
             self.global_freqs_cis.index_select(0, input_positions)
         )
+    
+    # (--- 2. Embed the text tokens ---)
     hidden_states = self.text_token_embedder(input_token_ids)
+
+
     normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype, device=hidden_states.device)
     hidden_states = hidden_states * normalizer
+
+
     if image_patches is not None and self.config.vision_config is not None:
       # the input has images
       B, N, C, H, W = image_patches.shape
@@ -114,8 +121,10 @@ class Gemma3ForMultimodalLM(nn.Module):
           image_presence_mask.clone(),
       )
 
+    # (--- 3. Index the input positions for the KV write ---)
     kv_write_indices = input_positions
 
+    # (--- 4. Run the model ---)
     hidden_states = self.model(
             hidden_states=hidden_states,
             freqs_cis=freqs_cis,
@@ -124,11 +133,15 @@ class Gemma3ForMultimodalLM(nn.Module):
             mask=mask,
             local_mask=local_mask,
         )
+    
+
+    # (--- 5. Apply the embedding weight scaler ---)  
     embedder_weight = self.text_token_embedder.weight
     if self.config.quant:
       embedder_weight = (
                 embedder_weight * self.text_token_embedder.weight_scaler.unsqueeze(-1))
 
+    # (--- 6. Sample the next tokens ---) 
     next_tokens, logits = self.sampler(
             embedding=embedder_weight,
             hidden_states=hidden_states,

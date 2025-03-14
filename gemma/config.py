@@ -47,9 +47,9 @@ class GemmaConfig:
     # The architecture of the model.
     architecture: Architecture = Architecture.GEMMA_1
     # The number of tokens in the vocabulary.
-    vocab_size: int = 256000
+    vocab_size: int = 256_000
     # The maximum sequence length that this model might ever be used with.
-    max_position_embeddings: int = 8192
+    max_position_embeddings: int = 8_192
     # The number of blocks in the model.
     num_hidden_layers: int = 28
     # The number of attention heads used in the attention layers of the model.
@@ -57,9 +57,9 @@ class GemmaConfig:
     # The number of key-value heads for implementing attention.
     num_key_value_heads: int = 16
     # The hidden size of the model.
-    hidden_size: int = 3072
+    hidden_size: int = 3_072
     # The dimension of the MLP representations.
-    intermediate_size: int = 24576
+    intermediate_size: int = 24_576
     # The number of head dimensions.
     head_dim: int = 256
     # The epsilon used by the rms normalization layers.
@@ -111,8 +111,8 @@ def get_config_for_2b(dtype: str = 'bfloat16') -> GemmaConfig:
         num_hidden_layers=18,
         num_attention_heads=8,
         num_key_value_heads=1,
-        hidden_size=2048,
-        intermediate_size=16384,
+        hidden_size=2_048,
+        intermediate_size=16_384,
     )
 
 
@@ -131,7 +131,7 @@ def get_config_for_2b_v2(dtype: str = 'bfloat16') -> GemmaConfig:
         attn_logit_softcapping=50.0,
         head_dim=256,
         attn_types=[AttentionType.LOCAL_SLIDING, AttentionType.GLOBAL] * 13,
-        sliding_window_size=4096,
+        sliding_window_size=4_096,
     )
 
 
@@ -142,15 +142,15 @@ def get_config_for_9b(dtype: str = 'bfloat16') -> GemmaConfig:
         num_hidden_layers=42,
         num_attention_heads=16,
         num_key_value_heads=8,
-        hidden_size=3584,
-        intermediate_size=14336,
+        hidden_size=3_584,
+        intermediate_size=14_336,
         use_pre_ffw_norm=True,
         use_post_ffw_norm=True,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
         head_dim=256,
         attn_types=[AttentionType.LOCAL_SLIDING, AttentionType.GLOBAL] * 21,
-        sliding_window_size=4096,
+        sliding_window_size=4_096,
     )
 
 
@@ -161,15 +161,15 @@ def get_config_for_27b(dtype: str = 'bfloat16') -> GemmaConfig:
       num_hidden_layers=46,
       num_attention_heads=32,
       num_key_value_heads=16,
-      hidden_size=4608,
-      intermediate_size=36864,
+      hidden_size=4_608,
+      intermediate_size=36_864,
       use_pre_ffw_norm=True,
       use_post_ffw_norm=True,
       final_logit_softcapping=30.0,
       attn_logit_softcapping=50.0,
       head_dim=128,
       attn_types=[AttentionType.LOCAL_SLIDING, AttentionType.GLOBAL] * 23,
-      sliding_window_size=4096,
+      sliding_window_size=4_096,
       query_pre_attn_scalar=144,  # hidden_size / num_attention_heads
   )
 
@@ -181,8 +181,8 @@ def get_config_for_1b(dtype: str) -> GemmaConfig:
       num_hidden_layers=26,
       num_attention_heads=4,
       num_key_value_heads=1,
-      hidden_size=1152,
-      intermediate_size=6912,
+      hidden_size=1_152,
+      intermediate_size=6_912,
       use_pre_ffw_norm=True,
       use_post_ffw_norm=True,
       head_dim=256,
@@ -214,8 +214,8 @@ def get_config_for_4b(dtype: str) -> GemmaConfig:
       num_hidden_layers=34,
       num_attention_heads=8,
       num_key_value_heads=4,
-      hidden_size=2560,
-      intermediate_size=10240,
+      hidden_size=2_560,
+      intermediate_size=10_240,
       use_pre_ffw_norm=True,
       use_post_ffw_norm=True,
       head_dim=256,
@@ -227,7 +227,7 @@ def get_config_for_4b(dtype: str) -> GemmaConfig:
           AttentionType.LOCAL_SLIDING,
           AttentionType.GLOBAL,
       ),
-      sliding_window_size=1024,
+      sliding_window_size=1_024,
       rope_wave_length={
           AttentionType.LOCAL_SLIDING: 10_000,
           AttentionType.GLOBAL: 1_000_000,
@@ -247,8 +247,8 @@ def get_config_for_12b(dtype: str) -> GemmaConfig:
       num_hidden_layers=48,
       num_attention_heads=16,
       num_key_value_heads=8,
-      hidden_size=3840,
-      intermediate_size=3840 * 8 // 2,
+      hidden_size=3_840,
+      intermediate_size=3_840 * 8 // 2,
       use_pre_ffw_norm=True,
       use_post_ffw_norm=True,
       head_dim=256,
@@ -260,7 +260,7 @@ def get_config_for_12b(dtype: str) -> GemmaConfig:
           AttentionType.LOCAL_SLIDING,
           AttentionType.GLOBAL,
       ),
-      sliding_window_size=1024,
+      sliding_window_size=1_024,
       rope_wave_length={
           AttentionType.LOCAL_SLIDING: 10_000,
           AttentionType.GLOBAL: 1_000_000,
@@ -281,12 +281,12 @@ def get_config_for_27b_v3(dtype: str) -> GemmaConfig:
       num_hidden_layers=62,
       num_attention_heads=32,
       num_key_value_heads=16,
-      hidden_size=5376,
-      intermediate_size=5376 * 8 // 2,
+      hidden_size=5_376,
+      intermediate_size=5_376 * 8 // 2,
       use_pre_ffw_norm=True,
       use_post_ffw_norm=True,
       head_dim=128,
-      query_pre_attn_scalar=5376 // 32,
+      query_pre_attn_scalar=5_376 // 32,
       attn_types=(
           AttentionType.LOCAL_SLIDING,
           AttentionType.LOCAL_SLIDING,
@@ -295,7 +295,7 @@ def get_config_for_27b_v3(dtype: str) -> GemmaConfig:
           AttentionType.LOCAL_SLIDING,
           AttentionType.GLOBAL,
       ),
-      sliding_window_size=1024,
+      sliding_window_size=1_024,
       rope_wave_length={
           AttentionType.LOCAL_SLIDING: 10_000,
           AttentionType.GLOBAL: 1_000_000,
