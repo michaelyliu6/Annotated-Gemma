@@ -91,13 +91,23 @@ class SiglipAttention(nn.Module):
 
 
 class SiglipMLP(nn.Module):
-  """Siglip MLP module."""
+  """
+  Siglip MLP module.
+  
+  
+  The standard GELU is defined as:
+  \text{GELU}(x) = x \cdot \Phi(x)
+
+  The GELU approximation is defined as:
+  \Phi(x) \approx \frac{1}{2} \left[ 1 + \tanh \left( \sqrt{\frac{2}{\pi}} \left( x + 0.044715 x^3 \right) \right) \right]
+  """
   def __init__(self, hidden_size, intermediate_size):
     super().__init__()
     self.fc1 = nn.Linear(hidden_size, intermediate_size)
     self.fc2 = nn.Linear(intermediate_size, hidden_size)
 
   def gelu_tanh(self, x):
+    # (--- Apply the GELU approximation function ---)  https://arxiv.org/pdf/1606.08415
     return (
         0.5
         * x
@@ -189,7 +199,7 @@ class SiglipVisionModel(nn.Module):
   ) -> torch.Tensor:
     # Embed the image according to SiplipVisionEmbeddings.
     x = self.patch_embedding(pixel_values)
-    
+
     # (batch_size,channels,height,width)->(batch_size, height*width, channels)
     x = x.flatten(2).transpose(1, 2)
 
