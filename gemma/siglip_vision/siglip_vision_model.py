@@ -189,6 +189,7 @@ class SiglipVisionModel(nn.Module):
   ) -> torch.Tensor:
     # Embed the image according to SiplipVisionEmbeddings.
     x = self.patch_embedding(pixel_values)
+    
     # (batch_size,channels,height,width)->(batch_size, height*width, channels)
     x = x.flatten(2).transpose(1, 2)
 

@@ -105,15 +105,23 @@ class Gemma3ForMultimodalLM(nn.Module):
     normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype, device=hidden_states.device)
     hidden_states = hidden_states * normalizer
 
-
+    # (--- 3. If there are images, embed them ---)
     if image_patches is not None and self.config.vision_config is not None:
       # the input has images
       B, N, C, H, W = image_patches.shape
       # Flatten and Pass to SiglipVisionModel, and apply SiglipVisionModel Exit
       flattened_input = image_patches.reshape(B * N, C, H, W)  # (B*N)xCxHxW
+
+      # (--- 3.1. Pass the image patches to the SiglipVisionModel ---)  
       image_embeddings = self.siglip_vision_model(flattened_input)  # (B*N)xUxD
+
+      # (--- 3.2. Normalize the image embeddings ---)
       image_embeddings = self.mm_soft_embedding_norm(image_embeddings)  # (B*N) x U x D
+
+      # (--- 3.3. Project the image embeddings to the model dimension ---)
       image_embeddings = self.mm_input_projection(image_embeddings)  # (B*N) x U x model_dim
+
+      # (--- 3.4. Populate the image embeddings into the hidden states ---)
       hidden_states = self.populate_image_embeddings(
           hidden_states.clone(),
           image_embeddings.clone(),
@@ -121,10 +129,10 @@ class Gemma3ForMultimodalLM(nn.Module):
           image_presence_mask.clone(),
       )
 
-    # (--- 3. Index the input positions for the KV write ---)
+    # (--- 4. Index the input positions for the KV write ---)
     kv_write_indices = input_positions
 
-    # (--- 4. Run the model ---)
+    # (--- 5. Run the model ---)
     hidden_states = self.model(
             hidden_states=hidden_states,
             freqs_cis=freqs_cis,
@@ -135,13 +143,13 @@ class Gemma3ForMultimodalLM(nn.Module):
         )
     
 
-    # (--- 5. Apply the embedding weight scaler ---)  
+    # (--- 6. Apply the embedding weight scaler ---)  
     embedder_weight = self.text_token_embedder.weight
     if self.config.quant:
       embedder_weight = (
                 embedder_weight * self.text_token_embedder.weight_scaler.unsqueeze(-1))
 
-    # (--- 6. Sample the next tokens ---) 
+    # (--- 7. Sample the next tokens ---) 
     next_tokens, logits = self.sampler(
             embedding=embedder_weight,
             hidden_states=hidden_states,
