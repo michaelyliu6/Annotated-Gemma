@@ -139,6 +139,18 @@ class Linear(nn.Module):
 
 
 class Embedding(nn.Module):
+    """
+    Custom Embedding module that supports quantization.
+
+    This module is similar to the standard PyTorch nn.Embedding, but it
+    includes support for quantization. When quantization is enabled (`quant=True`),
+    the embedding weights are stored as int8 and are scaled during the forward
+    pass using a weight scaler. This is useful for reducing memory usage and
+    potentially improving inference speed when using quantized models.
+
+    If quantization is disabled (`quant=False`), this module behaves
+    identically to nn.Embedding, storing weights in floating-point format.
+    """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, quant: bool):
         super().__init__()

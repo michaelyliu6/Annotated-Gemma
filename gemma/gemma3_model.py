@@ -89,7 +89,9 @@ class Gemma3ForMultimodalLM(nn.Module):
                 top_ks: torch.Tensor,
                 local_mask: torch.Tensor | None = None,
                 **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
-    # (--- 1. Compute the freqs_cis for the local and global attention ---)
+    # (--- 1. Prepare RoPE (Rotary Position Embeddings) frequency components ---)
+    # Select the precomputed cos-sin pairs for the current positions
+    # Different wavelengths are used for local sliding and global attention
     freqs_cis = {}
     freqs_cis[gemma_config.AttentionType.LOCAL_SLIDING] = (
             self.local_freqs_cis.index_select(0, input_positions)
@@ -99,29 +101,33 @@ class Gemma3ForMultimodalLM(nn.Module):
         )
     
     # (--- 2. Embed the text tokens ---)
-    hidden_states = self.text_token_embedder(input_token_ids)
+    hidden_states = self.text_token_embedder(input_token_ids) # Embedding module that supports quantization
 
-
+    # (--- 2.1. Normalize with Embedding Scaling Factor ---)
     normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype, device=hidden_states.device)
     hidden_states = hidden_states * normalizer
 
-    # (--- 3. If there are images, embed them ---)
+    # (--- 3. If there are images, use SiglipVisionModel to embed them to the model dimension ---)
     if image_patches is not None and self.config.vision_config is not None:
       # the input has images
+       # B: batch size, N: number of images, C: number of channels (3), H: height (896), W: width (896)
       B, N, C, H, W = image_patches.shape
-      # Flatten and Pass to SiglipVisionModel, and apply SiglipVisionModel Exit
-      flattened_input = image_patches.reshape(B * N, C, H, W)  # (B*N)xCxHxW
 
-      # (--- 3.1. Pass the image patches to the SiglipVisionModel ---)  
+      # (--- 3.1. Flatten the image patches ---)
+      # (B, N, C, H, W) -> (B*N, C, H, W)
+      flattened_input = image_patches.reshape(B * N, C, H, W) 
+
+      # (--- 3.2. Pass the image patches to the SiglipVisionModel ---)  
+      # (B*N, 3, 896, 896) -> (B*N, 1152)
       image_embeddings = self.siglip_vision_model(flattened_input)  # (B*N)xUxD
 
-      # (--- 3.2. Normalize the image embeddings ---)
+      # (--- 3.3. Apply RMSNorm to the image embeddings ---)
       image_embeddings = self.mm_soft_embedding_norm(image_embeddings)  # (B*N) x U x D
 
-      # (--- 3.3. Project the image embeddings to the model dimension ---)
+      # (--- 3.4. Project the image embeddings to the model dimension ---)
       image_embeddings = self.mm_input_projection(image_embeddings)  # (B*N) x U x model_dim
 
-      # (--- 3.4. Populate the image embeddings into the hidden states ---)
+      # (--- 3.5. Populate the image embeddings into the hidden states ---)
       hidden_states = self.populate_image_embeddings(
           hidden_states.clone(),
           image_embeddings.clone(),

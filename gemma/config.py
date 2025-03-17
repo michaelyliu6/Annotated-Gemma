@@ -320,10 +320,10 @@ def get_config_for_27b_v3(dtype: str) -> GemmaConfig:
   rms_norm_eps: 1e-6                                # Epsilon for normalization (default)
   
   # ===== POSITIONAL ENCODING =====
-  rope_wave_length: {{                               # RoPE wavelengths for different attention types
+  rope_wave_length: {                               # RoPE wavelengths for different attention types
       AttentionType.LOCAL_SLIDING: 10,000,
       AttentionType.GLOBAL: 1,000,000,
-  }}
+  }
   rope_scaling_factor: 8                            # Scaling factor for RoPE wavelength
   
   # ===== VOCABULARY & SEQUENCE LENGTH =====
@@ -335,10 +335,20 @@ def get_config_for_27b_v3(dtype: str) -> GemmaConfig:
   vision_config: SiglipVisionModelConfig            # Vision model configuration:
       # num_hidden_layers: 27                       # - Vision transformer layers
       # embedding_dim: 1152                         # - Vision embedding dimension
+      # embedding_use_bias: True                    # - Whether to use bias in 2D conv embedding
+      # input_channels: 3                           # - Number of input image channels
+      # image_size: 224                             # - Input image size
+      # conv2d_patch_size: 14                       # - Kernel size of 2D conv layer
       # num_attention_heads: 16                     # - Vision attention heads
       # head_dim: 72                                # - Vision head dimension
+      # num_key_value_heads: 16                     # - Number of key-value heads
+      # num_query_groups: 16                        # - Number of query groups
+      # qkv_use_bias: True                          # - Whether to use bias in QKV projection
+      # output_proj_use_bias: True                  # - Whether to use bias in output projection
       # intermediate_size: 4304                     # - Vision MLP size
-      # image_size: 224                             # - Input image size
+      # layer_norm_eps: 1e-6                        # - Layer normalization epsilon
+      # dtype: 'bfloat16'                           # - Model precision
+      # quant: False                                # - Whether quantization is used
       # encoding_sequence_length: 256               # - Vision sequence length
   """
   return GemmaConfig(
