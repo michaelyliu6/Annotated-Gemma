@@ -275,6 +275,72 @@ def get_config_for_12b(dtype: str) -> GemmaConfig:
 
 
 def get_config_for_27b_v3(dtype: str) -> GemmaConfig:
+  """
+  Returns the configuration for the latest full Gemma 3 27B model.
+  This is the most advanced and complete model in the Gemma family.
+  
+  Full configuration with all parameters organized by category:
+  
+  # ===== MODEL ARCHITECTURE =====
+  architecture: Architecture.GEMMA_3                # Gemma 3 architecture
+  dtype: '{dtype}'                                  # Model precision (bfloat16 by default)
+  quant: False                                      # Whether quantization is used (default)
+  
+  # ===== MODEL DIMENSIONS =====
+  hidden_size: 5,376                                # Size of hidden layers
+  num_hidden_layers: 62                             # Number of transformer blocks
+  intermediate_size: 21,504                         # MLP size (5,376 * 8 // 2)
+                                                    # Note: Written as (hidden_size * 8 // 2) instead of (hidden_size * 4) to indicate that
+                                                    # the MLP uses a gated architecture with GELU activation and two parallel
+                                                    # projections (gate_proj and up_proj), each of size hidden_size → intermediate_size.
+                                                    # The total expansion factor is 8x, with each projection being 4x.
+                                                    # See implementation in model.py:190-212 (class GemmaMLP).
+  
+  # ===== ATTENTION MECHANISM =====
+  num_attention_heads: 32                           # Number of attention heads
+  num_key_value_heads: 16                           # Number of key-value heads (grouped-query attention)
+  head_dim: 128                                     # Dimension per attention head
+  query_pre_attn_scalar: 168                        # Query normalization factor (5,376 // 32)
+  use_qk_norm: True                                 # Use query-key normalization
+  
+  # ===== ATTENTION PATTERNS =====
+  attn_types: (                                     # Pattern of attention types
+      AttentionType.LOCAL_SLIDING,                  # 5 local sliding windows followed by
+      AttentionType.LOCAL_SLIDING,                  # 1 global attention, repeated throughout
+      AttentionType.LOCAL_SLIDING,                  # the model's layers
+      AttentionType.LOCAL_SLIDING,
+      AttentionType.LOCAL_SLIDING,
+      AttentionType.GLOBAL,
+  )
+  sliding_window_size: 1,024                        # Size of sliding window for local attention
+  
+  # ===== NORMALIZATION =====
+  use_pre_ffw_norm: True                            # Use normalization before feedforward
+  use_post_ffw_norm: True                           # Use normalization after feedforward
+  rms_norm_eps: 1e-6                                # Epsilon for normalization (default)
+  
+  # ===== POSITIONAL ENCODING =====
+  rope_wave_length: {{                               # RoPE wavelengths for different attention types
+      AttentionType.LOCAL_SLIDING: 10,000,
+      AttentionType.GLOBAL: 1,000,000,
+  }}
+  rope_scaling_factor: 8                            # Scaling factor for RoPE wavelength
+  
+  # ===== VOCABULARY & SEQUENCE LENGTH =====
+  vocab_size: 262,144                               # Size of token vocabulary
+  max_position_embeddings: 131,072                  # Maximum sequence length
+  tokenizer: 'tokenizer/gemma3_cleaned_262144_v2.spiece.model'  # Tokenizer path
+  
+  # ===== MULTIMODAL CAPABILITIES =====
+  vision_config: SiglipVisionModelConfig            # Vision model configuration:
+      # num_hidden_layers: 27                       # - Vision transformer layers
+      # embedding_dim: 1152                         # - Vision embedding dimension
+      # num_attention_heads: 16                     # - Vision attention heads
+      # head_dim: 72                                # - Vision head dimension
+      # intermediate_size: 4304                     # - Vision MLP size
+      # image_size: 224                             # - Input image size
+      # encoding_sequence_length: 256               # - Vision sequence length
+  """
   return GemmaConfig(
       dtype=dtype,
       architecture=Architecture.GEMMA_3,
