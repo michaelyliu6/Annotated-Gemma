@@ -118,13 +118,16 @@ class Gemma3ForMultimodalLM(nn.Module):
       flattened_input = image_patches.reshape(B * N, C, H, W) 
 
       # (--- 3.2. Pass the image patches to the SiglipVisionModel ---)  
-      # (B*N, 3, 896, 896) -> (B*N, 1152)
-      image_embeddings = self.siglip_vision_model(flattened_input)  # (B*N)xUxD
+      # (B*N, C, H, W) -> (B*N, U, D)
+      # U: number of patches (256), D: embedding dimension (1152)
+      image_embeddings = self.siglip_vision_model(flattened_input)  # (B*N) x U x D
 
       # (--- 3.3. Apply RMSNorm to the image embeddings ---)
       image_embeddings = self.mm_soft_embedding_norm(image_embeddings)  # (B*N) x U x D
 
       # (--- 3.4. Project the image embeddings to the model dimension ---)
+      # (B*N, U, D) -> (B*N, U, model_dim)
+      # model_dim: hidden_size (5376)
       image_embeddings = self.mm_input_projection(image_embeddings)  # (B*N) x U x model_dim
 
       # (--- 3.5. Populate the image embeddings into the hidden states ---)
@@ -172,6 +175,30 @@ class Gemma3ForMultimodalLM(nn.Module):
                                 input_token_ids: torch.Tensor, # B x L
                                 image_presence_mask: torch.Tensor, # B x N
                                 ):
+    """Inserts image embeddings into the model's hidden states at image token placeholder positions.
+    
+    This function is a key part of multimodal processing in Gemma3. It identifies which tokens in the 
+    input sequence are image placeholders and replaces them with the corresponding image embeddings 
+    that have been processed by the vision model.
+    
+    Args:
+        hidden_states: Tensor of shape (batch_size, seq_len, model_dim) containing the text token embeddings.
+        image_embeddings: Tensor of shape (batch_size*num_images, num_patches, model_dim) containing 
+            processed image patch embeddings from the vision model.
+        input_token_ids: Tensor of shape (batch_size, seq_len) containing the input token IDs, 
+            where image token placeholders are represented by a special token ID.
+        image_presence_mask: Boolean tensor of shape (batch_size, num_images) indicating which 
+            image positions in the batch actually contain valid images.
+            
+    Returns:
+        A tensor of shape (batch_size, seq_len, model_dim) with image embeddings inserted at 
+        the positions of image token placeholders. The tensor is made contiguous in memory.
+    
+    The function works in two main steps:
+    1. First, it selects valid image embeddings based on the image_presence_mask.
+    2. Then, it identifies all image token placeholders in the input sequence and 
+       replaces them with the corresponding image embeddings.
+    """
     batch_size, seq_len, model_dim = hidden_states.shape
     # Step 1 of 2: Fetch valid image embeddings
     # flatten indices of valid image embeddings
