@@ -166,19 +166,21 @@ class SiglipVisionModel(nn.Module):
 
     # SigLiPFromPatches_0/siglip_encoder/embedding
     self.patch_embedding = nn.Conv2d(
-        in_channels=config.input_channels,
-        out_channels=config.embedding_dim,
-        kernel_size=config.conv2d_patch_size,
-        stride=config.conv2d_patch_size,
+        in_channels=config.input_channels, # 3
+        out_channels=config.embedding_dim, # 1152
+        kernel_size=config.conv2d_patch_size, # 14
+        stride=config.conv2d_patch_size, # 14
         padding=0,
-        bias=config.embedding_use_bias,
+        bias=config.embedding_use_bias, # True
     )
-    self.num_patches = (config.image_size // config.conv2d_patch_size) ** 2
+    self.num_patches = (config.image_size // config.conv2d_patch_size) ** 2 # (896//14)**2 = 4096
     self.num_positions = self.num_patches
     # SigLiPFromPatches_0/siglip_encoder
     self.position_embedding = nn.Embedding(
-        self.num_positions, config.embedding_dim
+        self.num_positions, config.embedding_dim # 4096, 1152
     )
+
+    # position_ids = einops.repeat(torch.arange(self.num_positions), 'num_positions -> 1 num_positions') # (1, 4096)
     self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     # SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_i
@@ -195,30 +197,36 @@ class SiglipVisionModel(nn.Module):
   @torch.inference_mode
   def forward(
       self,
-      pixel_values: torch.Tensor,
+      pixel_values: torch.Tensor, # (B, C, H, W)
   ) -> torch.Tensor:
     # (--- 1. Embed the image according to SiplipVisionEmbeddings ---)
-    # (B, C, H, W) -> (B, D, H/14, W/14)
-    # B: batch size, C: number of channels (3), D: embedding dimension (1152), H: height (896), W: width (896)
+    # (batch_size, channels, height, width) -> (batch_size, embedding_dim, height//14, width//14)
+    # (B, 3, 896, 896) -> (B, 1152, 64, 64)
     x = self.patch_embedding(pixel_values)
 
     # (--- 2. Flatten the image and transpose the dimensions ---)
-    #### (batch_size,channels,height,width)->(batch_size, height*width, channels) <- wrong? 
-    # (B, D, H/14, W/14) -> (B, D, H/14 * W/14)
+    # (batch_size, embedding_dim, height//14, width//14) -> (batch_size, embedding_dim, num_patches)
+    # (B, 1152, 64, 64) -> (B, 4096, 1152)
     x = x.flatten(2).transpose(1, 2)
 
     # (--- 3. Add the position embeddings to the image embeddings ---)
-    position_ids = self.position_ids.to(pixel_values.device)
-    # (B, D, H/14 * W/14) -> (B, H/14 * W/14, D)
-    x = x + self.position_embedding(position_ids)
+    position_ids = self.position_ids.to(pixel_values.device) # Move to the same device as input `pixel_values`
+    # (1, num_patches) -> (1, num_patches, embedding_dim)
+    # (1, 4096) -> (1, 4096, 1152)
+    x = x + self.position_embedding(position_ids) # [batch_size, 4096, 1152] + [1, 4096, 1152] (broadcasting) -> [batch_size, 4096, 1152]
 
     # (--- 4. Pass the image embeddings to the SiglipEncoderBlocks ---)
+    # (batch_size, num_patches, embedding_dim) -> (batch_size, num_patches, embedding_dim)
+    # (B, 4096, 1152) -> (B, 4096, 1152)
     for block in self.encoder_blocks:
-      x = block(x)  # batch_size, height*width, embedding_dim (1152)
+      x = block(x)
 
     # (--- 5. Apply the final normalization ---)
+    # (batch_size, num_patches, embedding_dim) -> (batch_size, num_patches, embedding_dim)
+    # (B, 4096, 1152) -> (B, 4096, 1152)
     x = self.final_norm(x)
 
     # (--- 6. Apply the average pooling ---)
-    # siglip exit https://source.corp.google.com/piper///depot/google3/third_party/py/gemma/multimodal/vision.py;l=220
+    # (batch_size, num_patches, embedding_dim) -> (batch_size, num_patches//16, embedding_dim)
+    # (B, 4096, 1152) -> (B, 256, 1152)
     return self.avg_pool(x)

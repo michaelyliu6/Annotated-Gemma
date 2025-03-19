@@ -28,7 +28,9 @@ from . import tokenizer
 from .siglip_vision import siglip_vision_model
 
 class Gemma3ForMultimodalLM(nn.Module):
-  """Gemma3 model for multimodal causal LM."""
+  """
+  This class implements the high-level abstraction for multimodal Gemma3 models.
+  """
   def __init__(
         self,
         config: gemma_config.GemmaConfig,
@@ -52,7 +54,7 @@ class Gemma3ForMultimodalLM(nn.Module):
     self.mm_soft_embedding_norm = gemma_model.RMSNorm(config.vision_config.embedding_dim,
                                                            eps = config.rms_norm_eps)
     # transformer/embedder/mm_input_projection
-    self.mm_input_projection = gemma_model.Linear(config.vision_config.embedding_dim, config.hidden_size, config.quant)
+    self.mm_input_projection = gemma_model.Linear(config.vision_config.embedding_dim, config.hidden_size, config.quant) # (1152, 5376)
 
     if config.rope_wave_length is None:
       raise ValueError('rope_wave_length must be provided for Gemma3.')
@@ -101,34 +103,38 @@ class Gemma3ForMultimodalLM(nn.Module):
         )
     
     # (--- 2. Embed the text tokens ---)
+    # (B, L) -> (B, L, hidden_size)
+    # (B, 1024) -> (B, 1024, 5376)
     hidden_states = self.text_token_embedder(input_token_ids) # Embedding module that supports quantization
 
     # (--- 2.1. Normalize with Embedding Scaling Factor ---)
     normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype, device=hidden_states.device)
     hidden_states = hidden_states * normalizer
 
-    # (--- 3. If there are images, use SiglipVisionModel to embed them to the model dimension ---)
+    # (--- 3. If there are images and multimodal processing is enabled, use SiglipVisionModel to embed them to the model dimension ---)
     if image_patches is not None and self.config.vision_config is not None:
       # the input has images
-       # B: batch size, N: number of images, C: number of channels (3), H: height (896), W: width (896)
+      # (batch_size, number_of_images, channels, height, width)
+      # (B, N, 3, 896, 896)
       B, N, C, H, W = image_patches.shape
 
       # (--- 3.1. Flatten the image patches ---)
-      # (B, N, C, H, W) -> (B*N, C, H, W)
+      # (batch_size, number_of_images, channels, height, width) -> (batch_size*number_of_images, channels, height, width)
+      # (B, N, 3, 896, 896) -> (B*N, 3, 896, 896)
       flattened_input = image_patches.reshape(B * N, C, H, W) 
 
       # (--- 3.2. Pass the image patches to the SiglipVisionModel ---)  
-      # (B*N, C, H, W) -> (B*N, U, D)
-      # U: number of patches (256), D: embedding dimension (1152)
-      image_embeddings = self.siglip_vision_model(flattened_input)  # (B*N) x U x D
+      # (batch_size*number_of_images, channels, height, width) -> (batch_size*number_of_images, num_patches//16, vision_embedding_dim)
+      # (B*N, 3, 896, 896) -> (B*N, 256, 1152)
+      image_embeddings = self.siglip_vision_model(flattened_input)
 
       # (--- 3.3. Apply RMSNorm to the image embeddings ---)
-      image_embeddings = self.mm_soft_embedding_norm(image_embeddings)  # (B*N) x U x D
+      image_embeddings = self.mm_soft_embedding_norm(image_embeddings) 
 
       # (--- 3.4. Project the image embeddings to the model dimension ---)
-      # (B*N, U, D) -> (B*N, U, model_dim)
-      # model_dim: hidden_size (5376)
-      image_embeddings = self.mm_input_projection(image_embeddings)  # (B*N) x U x model_dim
+      # (batch_size*number_of_images, num_patches//16, vision_embedding_dim) -> (batch_size*number_of_images, num_patches//16, hidden_size)
+      # (B*N, 256, 1152) @ (1152, 5376) -> (B*N, 256, 5376)
+      image_embeddings = self.mm_input_projection(image_embeddings) 
 
       # (--- 3.5. Populate the image embeddings into the hidden states ---)
       hidden_states = self.populate_image_embeddings(
@@ -141,7 +147,7 @@ class Gemma3ForMultimodalLM(nn.Module):
     # (--- 4. Index the input positions for the KV write ---)
     kv_write_indices = input_positions
 
-    # (--- 5. Run the model ---)
+    # (--- 5. Run the model and update the KV cache ---)
     hidden_states = self.model(
             hidden_states=hidden_states,
             freqs_cis=freqs_cis,
@@ -152,7 +158,7 @@ class Gemma3ForMultimodalLM(nn.Module):
         )
     
 
-    # (--- 6. Apply the embedding weight scaler ---)  
+    # (--- 6. Apply unembedding layer (and weight scaler if quantization is enabled) ---)  
     embedder_weight = self.text_token_embedder.weight
     if self.config.quant:
       embedder_weight = (
@@ -170,10 +176,10 @@ class Gemma3ForMultimodalLM(nn.Module):
     return next_tokens, logits
 
   def populate_image_embeddings(self,
-                                hidden_states: torch.Tensor, # B x L x model_dim
-                                image_embeddings: torch.Tensor, # (B*N) x U x model_dim
-                                input_token_ids: torch.Tensor, # B x L
-                                image_presence_mask: torch.Tensor, # B x N
+                                hidden_states: torch.Tensor, # (batch_size, seq_len, hidden_size)
+                                image_embeddings: torch.Tensor, # (batch_size*number_of_images, num_patches//16, hidden_size)
+                                input_token_ids: torch.Tensor, # (batch_size, seq_len)
+                                image_presence_mask: torch.Tensor, # (batch_size, number_of_images)
                                 ):
     """Inserts image embeddings into the model's hidden states at image token placeholder positions.
     
@@ -203,7 +209,8 @@ class Gemma3ForMultimodalLM(nn.Module):
     # Step 1 of 2: Fetch valid image embeddings
     # flatten indices of valid image embeddings
     valid_image_embeddings_indices = torch.nonzero(image_presence_mask.flatten(), as_tuple=False).squeeze()
-    # num_valid_images x model_dim
+
+    # (batch_size*number_of_images, num_patches//16, hidden_size) -> (number_of_valid_images, num_patches, embedding_dim)
     valid_image_embeddings = image_embeddings.index_select(0, valid_image_embeddings_indices)
 
     # Step 2 of 2: Replace image embeddings at right places.
@@ -212,6 +219,7 @@ class Gemma3ForMultimodalLM(nn.Module):
 
     hidden_states = hidden_states.reshape(-1, self.config.hidden_size)
     hidden_states[image_placeholder_indices] = valid_image_embeddings.reshape(-1, self.config.hidden_size)
+
     return hidden_states.reshape(batch_size, seq_len, model_dim).contiguous()
 
   def create_attention_mask(self, input_ids: torch.Tensor, sequence_length: int):
@@ -282,7 +290,7 @@ class Gemma3ForMultimodalLM(nn.Module):
     total_seq_len = processing_result["max_seq_len"]
     image_presence_mask = processing_result["image_presence_mask"]
 
-    # Create attention mask.
+    # (--- 1. Create attention masks ---)
     min_dtype = torch.finfo(self.dtype).min
     if self.config.sliding_window_size is None:
       raise ValueError('gemma 3 model requires sliding_window size')
@@ -290,6 +298,7 @@ class Gemma3ForMultimodalLM(nn.Module):
     mask_tensor = torch.where(boolean_mask, 0, torch.tensor(min_dtype, dtype=torch.float32, device=device)).contiguous()
     local_mask_tensor = torch.where(local_boolean_mask, 0, torch.tensor(min_dtype, dtype=torch.float32, device=device)).contiguous()
 
+    # (--- 2. Initialize the KV cache ---)
     kv_caches = []
     for _ in range(self.config.num_hidden_layers):
       size = (batch_size, total_seq_len, self.config.num_key_value_heads,

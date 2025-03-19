@@ -31,7 +31,7 @@ class SiglipVisionModelConfig:
   # The number of channels in the input images.
   input_channels: int = 3
   # The input image size.
-  image_size: int = preprocessor.DEFAULT_IMAGE_SIZE
+  image_size: int = preprocessor.DEFAULT_IMAGE_SIZE # 896
   # Kernel size of 2D convolution layer.
   conv2d_patch_size = 14
   # The number of attention heads used in the attention layers of the model.

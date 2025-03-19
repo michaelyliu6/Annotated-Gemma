@@ -404,6 +404,9 @@ class GemmaDecoderLayer(nn.Module):
 
 
 class Gemma2DecoderLayer(nn.Module):
+    """
+    This class implements the decoder layer for the Gemma2 and Gemma3 models.
+    """
     def __init__(
         self,
         config: gemma_config.GemmaConfig,
@@ -471,7 +474,9 @@ class Gemma2DecoderLayer(nn.Module):
 
 
 class GemmaModel(nn.Module):
-
+    """
+    This class is the core architecture use by both the text-only and multimodal Gemma models.
+    """
     def __init__(self, config: gemma_config.GemmaConfig):
         super().__init__()
         self.config = config
@@ -519,12 +524,14 @@ class GemmaModel(nn.Module):
 
 
 class GemmaForCausalLM(nn.Module):
-
-  def __init__(
+    """
+    This class implements the high-level abstraction for text-only Gemma models.
+    """
+    def __init__(
         self,
         config: gemma_config.GemmaConfig,
     ):
-    super().__init__()
+        super().__init__()
     self.config = config
     assert config.hidden_size % config.num_attention_heads == 0
 
