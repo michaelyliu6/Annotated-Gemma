@@ -282,7 +282,7 @@ class GemmaAttention(nn.Module):
         local_mask: torch.Tensor = None,
     ) -> torch.Tensor:
         hidden_states_shape = hidden_states.shape
-        assert len(hidden_states_shape) == 3
+        assert len(hidden_states_shape) == 3 # (batch_size, seq_len, hidden_size)
 
         batch_size, input_len, _ = hidden_states_shape
 

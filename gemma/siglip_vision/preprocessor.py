@@ -45,7 +45,7 @@ def preprocess_images_for_siglip_vision(
     std_tensor = torch.tensor(_IMAGE_STD, dtype=torch.float32).reshape(3, 1, 1)
 
     for image in images:
-        # Resize image
+        # Resize image using bilinear interpolation to the target size (896, 896)
         image = image.resize((image_size, image_size), Image.Resampling.BILINEAR)
 
         # Convert to NumPy and ensure float32 type
@@ -54,10 +54,10 @@ def preprocess_images_for_siglip_vision(
         # Convert to PyTorch tensor and rearrange channels
         image_tensor = torch.from_numpy(image_np).permute(2, 0, 1)  # (H, W, C) → (C, H, W)
 
-        # Normalize
+        # Normalize from [0, 1] to [-1, 1]  
         image_tensor = (image_tensor - mean_tensor) / std_tensor
 
-        # Clip the values to [-1, 1]
+        # Clip the values to [-1, 1] (Safeguard against any floating point errors)
         image_tensor = torch.clamp(image_tensor, -1, 1)
 
         processed_images.append(image_tensor)

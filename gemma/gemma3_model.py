@@ -224,13 +224,19 @@ class Gemma3ForMultimodalLM(nn.Module):
 
   def create_attention_mask(self, input_ids: torch.Tensor, sequence_length: int):
     batch_size = input_ids.shape[0]
+    # Standard causal mask (lower triangular matrix)
     causal_mask = torch.tril(torch.ones((batch_size, 1, sequence_length, sequence_length), dtype=torch.bool, device=input_ids.device))
+
+    # Identify image tokens in the sequence
     image_token_mask = input_ids == self.tokenizer.image_token_placeholder_id
+    
     # Pad the mask to the left with 0. This is to make sure the boundary
     # detection works correctly. Boundary (starting index of image patch) is
     # detected when the value changes from 0 to 1.
+    # Add zero padding to detect boundaries between text and image regions
     padded_mask = nn.functional.pad(image_token_mask, (1, 0), value=0)
     # Find the boundary (starting index) of the image tokens patch.
+    # Find where image regions start (transitions from 0→1)
     boundary = padded_mask[:, 1:] > padded_mask[:, :-1]
     # Number the boundary.
     # boundary:
@@ -291,11 +297,12 @@ class Gemma3ForMultimodalLM(nn.Module):
     image_presence_mask = processing_result["image_presence_mask"]
 
     # (--- 1. Create attention masks ---)
-    min_dtype = torch.finfo(self.dtype).min
+    min_dtype = torch.finfo(self.dtype).min # -inf
     if self.config.sliding_window_size is None:
       raise ValueError('gemma 3 model requires sliding_window size')
     boolean_mask, local_boolean_mask = self.create_attention_mask(user_input_token_ids, total_seq_len)
-    mask_tensor = torch.where(boolean_mask, 0, torch.tensor(min_dtype, dtype=torch.float32, device=device)).contiguous()
+    # Create a mask tensor with 0 for True values and -inf for False values
+    mask_tensor = torch.where(boolean_mask, 0, torch.tensor(min_dtype, dtype=torch.float32, device=device)).contiguous() 
     local_mask_tensor = torch.where(local_boolean_mask, 0, torch.tensor(min_dtype, dtype=torch.float32, device=device)).contiguous()
 
     # (--- 2. Initialize the KV cache ---)
